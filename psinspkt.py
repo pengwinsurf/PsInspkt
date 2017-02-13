@@ -26,7 +26,7 @@ def get_strings_prompt(process):
     :return:
     """
     try:
-        print "Select option\n1- Show all strings in Process Memory (slow)\n" \
+        print "Select option\n1- Show all strings in Process Memory\n" \
               "2- Show all potential filenames in Process memory\n" \
               "3- Show all potential registry keys in process memory\n" \
               "4- Show all potential domain names in process memory\n" \
@@ -298,7 +298,7 @@ def get_strings(process, strClass=None):
     print 'ID\tAddress\tString\n'
     if not strClass:
         ## All strings
-        with open('all_strings.str', 'w+') as fh:
+        with open('all_strings.txt', 'w+') as fh:
             fh.write(columnHdrs)
             for addr, _, string in process.ascii:
                 id = process.find_page_id(addr)
@@ -315,7 +315,7 @@ def get_strings(process, strClass=None):
     elif strClass == 'Registry':
 
         ## All registry
-        with open('registry.str', 'w+') as fh:
+        with open('registry.txt', 'w+') as fh:
             fh.write(columnHdrs)
             results = process.search_reg(registry)
             for addr, _, string in results:
@@ -333,7 +333,7 @@ def get_strings(process, strClass=None):
     elif strClass == 'Filenames':
 
         ## All filenames
-        with open('filenames.str', 'w+') as fh:
+        with open('filenames.txt', 'w+') as fh:
             fh.write(columnHdrs)
             results = process.search_reg(filenames)
 
@@ -352,7 +352,7 @@ def get_strings(process, strClass=None):
     elif strClass == 'IP_address':
 
         ## All ips
-        with open('ip_addresses.str', 'w+') as fh:
+        with open('ip_addresses.txt', 'w+') as fh:
             fh.write(columnHdrs)
             results = process.search_reg(ip_address)
             for addr, _, string in results:
@@ -371,7 +371,7 @@ def get_strings(process, strClass=None):
     elif strClass == 'Domains':
 
         ##  All Domains
-        with open('domains.str', 'w+') as fh:
+        with open('domains.txt', 'w+') as fh:
             fh.write(columnHdrs)
             results = process.search_reg(domains)
             if not results:
@@ -395,7 +395,7 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument("pid", type=int, help="The process ID to attach to")
-    parser.add_argument("mode", choices=['run', 'attach'], help="Mode of operation. Run is instrumentation mode while"
+    parser.add_argument("mode", choices=['run', 'attach'], help="Mode of operation. Run is instrumentation mode while (TODO)"
                                                                 "attach attaches to an already running process")
 
     argv = parser.parse_args()

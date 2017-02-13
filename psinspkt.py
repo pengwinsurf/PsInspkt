@@ -2,6 +2,8 @@ import sys
 import ctypes
 import signal
 import argparse
+import re
+import binascii
 
 
 from winappdbg import *
@@ -16,6 +18,29 @@ def start_proc(arg):
     cmd_line = System().argv_to_cmdline(procname)
     proc = System().start_process(cmd_line)
     return proc
+
+def get_strings_prompt(process):
+    """
+        Promp to choose string search mode
+    :param process:
+    :return:
+    """
+    try:
+        print "Select option\n1- Show all strings in Process Memory (slow)\n" \
+              "2- Show all potential filenames in Process memory\n" \
+              "3- Show all potential registry keys in process memory\n" \
+              "4- Show all potential domain names in process memory\n" \
+              "5- Show all potential IP addresses in process memory\n"
+        option = int(raw_input(">"))
+
+    except ValueError as e:
+        print "Invalid value. %s" % e
+        return None
+    if option not in [1,2,3,4,5]:
+        print "Invalid option please select 1, 2,3,4 or 5"
+        return None
+    else:
+        return option
 
 
 def prompt_1():
@@ -89,13 +114,15 @@ def prompt_page_view():
     try:
         print "Select option:\n1- Show all commited pages\n" \
               "2- Show only executable pages\n" \
-              "3- Search process mem for MZ\n4- Exit\n"
+              "3- Search process mem for MZ\n" \
+              "4- Search strings in process memory\n" \
+              "5- Exit\n"
         option = int(raw_input(">"))
     except ValueError as e:
         print "Invalid option. %s" % e
         return None
 
-    if option not in [1, 2, 3, 4]:
+    if option not in [1, 2, 3, 4, 5]:
         print "Invalid option provided."
         return None
     else:
@@ -180,8 +207,31 @@ def view_proc_mem(process):
     elif option == 3: ## Search MZ
         search_mz(process)
         return True
+
+    elif option == 4: ## String search
+        option = get_strings_prompt(process)
+        if option ==1:
+            ## All ascii
+            get_strings(process)
+        elif option == 2:
+            ## Filenames
+            get_strings(process,'Filenames')
+        elif option == 3:
+            ## Registry Keys
+            get_strings(process, 'Registry')
+        elif option == 4:
+            ## Domain names
+            get_strings(process, 'Domains')
+        elif option == 5:
+            ## IP addresses
+            get_strings(process, 'IP_address')
+
+        return True
+    elif option == 5: ## Exit
+        return False
+
     else:
-        print "Invalid option please select 1, 2 or 3"
+        print "Invalid option please select 1, 2, 3 or "
         return False
 
 
@@ -229,10 +279,124 @@ def option_prompt2(process):
         return False
 
 
+def get_strings(process, strClass=None):
+    """
+
+    :param process: (DProcess) The process object
+    :param strClass: None/Registry/Filenames/Directories/Domains/Ips
+                    None = all ascii strings
+    :return:        Registry = search for registry keys
+                    Filenames/Dirs
+                    Domains/IP address
+    """
+    columnHdrs = 'ID,Address,String\n'
+    filenames = "(\w+\\\\)+\w+\.[a-zA-Z]{2,3}"
+    registry = '((HKLM|HKCU|HKCR)\\\\)?(Security|Software|System|SAM)\\\\[\w+\\\\]+[\w\s\00]+?'
+    domains = '((http|http)s\:)?\/\/(\w+\.)+\w{2,3}\/'
+    ip_address = '(\d{2,3}\.){3}\d+'
+
+    print 'ID\tAddress\tString\n'
+    if not strClass:
+        ## All strings
+        with open('all_strings.str', 'w+') as fh:
+            fh.write(columnHdrs)
+            for addr, _, string in process.ascii:
+                id = process.find_page_id(addr)
+                string.replace('[\s\00]', '')
+                if 'Strings' not in process.memMap[id].keys():
+                    process.memMap[id]['Strings'] = []
+
+                if string not in process.memMap[id]['Strings']:
+                    process.memMap[id]['Strings'].append(string)
+
+                print '{0}\t{1}\t{2}'.format(id, hex(addr), string)
+                fh.write(','.join([str(id), hex(addr), string.encode('ascii')])+'\n')
+
+    elif strClass == 'Registry':
+
+        ## All registry
+        with open('registry.str', 'w+') as fh:
+            fh.write(columnHdrs)
+            results = process.search_reg(registry)
+            for addr, _, string in results:
+                id = process.find_page_id(addr)
+                string.replace('[\s\00]', '')
+                if 'Strings' not in process.memMap[id].keys():
+                    process.memMap[id]['Strings'] = []
+
+                if string not in process.memMap[id]['Strings']:
+                    process.memMap[id]['Strings'].append(string)
+
+                print '{0}\t{1}\t{2}'.format(id, hex(addr), string)
+                fh.write(','.join([str(id), hex(addr), string.encode('ascii')])+'\n')
+
+    elif strClass == 'Filenames':
+
+        ## All filenames
+        with open('filenames.str', 'w+') as fh:
+            fh.write(columnHdrs)
+            results = process.search_reg(filenames)
+
+            for addr, _, string in results:
+                id = process.find_page_id(addr)
+                string.replace('[\s\00]', '')
+                if 'Strings' not in process.memMap[id].keys():
+                    process.memMap[id]['Strings'] = []
+
+                if string not in process.memMap[id]['Strings']:
+                    process.memMap[id]['Strings'].append(string)
+
+                print '{0}\t{1}\t{2}'.format(id, hex(addr), string)
+                fh.write(','.join([str(id), hex(addr), string.encode('ascii')]) + '\n')
+
+    elif strClass == 'IP_address':
+
+        ## All ips
+        with open('ip_addresses.str', 'w+') as fh:
+            fh.write(columnHdrs)
+            results = process.search_reg(ip_address)
+            for addr, _, string in results:
+                id = process.find_page_id(addr)
+                string.replace('[\s\00]', '')
+
+                if 'Strings' not in process.memMap[id].keys():
+                    process.memMap[id]['Strings'] = []
+
+                if string not in process.memMap[id]['Strings']:
+                    process.memMap[id]['Strings'].append(string)
+
+                print '{0}\t{1}\t{2}'.format(id, hex(addr), string)
+                fh.write(','.join([str(id), hex(addr), string.encode('ascii')]) + '\n')
+
+    elif strClass == 'Domains':
+
+        ##  All Domains
+        with open('domains.str', 'w+') as fh:
+            fh.write(columnHdrs)
+            results = process.search_reg(domains)
+            if not results:
+                print "No matches"
+                return
+            strArray = []
+            for addr, _, string in results:
+                id = process.find_page_id(addr)
+                string.replace('[\s\00]', '')
+                if 'Strings' not in process.memMap[id].keys():
+                    process.memMap[id]['Strings'] = []
+
+                if string not in process.memMap[id]['Strings']:
+                    process.memMap[id]['Strings'].append(string)
+
+                print '{0}\t{1}\t{2}'.format(id, hex(addr), string)
+                fh.write(','.join([str(id), hex(addr), string.encode('ascii')])+'\n')
+
+
 def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument("pid", type=int, help="The process ID to attach to")
+    parser.add_argument("mode", choices=['run', 'attach'], help="Mode of operation. Run is instrumentation mode while"
+                                                                "attach attaches to an already running process")
 
     argv = parser.parse_args()
 
@@ -263,7 +427,7 @@ def main():
         print "=======================\n"
 
     state = True
-    while(state):
+    while state:
         state = option_prompt2(zProcess)
 
     zProcess.detach()

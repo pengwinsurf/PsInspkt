@@ -23,6 +23,7 @@ class DProcess:
     def __init__(self, pid=None):
 
         try:
+            print "Intialising ..."
             self._dbg = Debug()
             self._proc = self._dbg.attach(pid)
             self._proc.suspend()
@@ -31,6 +32,7 @@ class DProcess:
             self.procname = self._proc.get_image_name()
             self.imagebase = self._proc.get_image_base()
             self._ptrPEB = self._proc.get_peb_address()
+            self.ascii = self._proc.strings(minSize=7)
             self.threads = {}
             self.modules = []
             self.services = []
@@ -290,7 +292,7 @@ class DProcess:
     def search_strings(self, string, minAddr=None, maxAddr=None):
         """
 
-        :param string: Text to search for
+        :param string: str or unicode string to search for
                encoding: If Unicode text to search for provide encoding otherwise none
                case: Bool. If non then search is case-insensitive
         :return: list of tuples Address, Match (int, str)
@@ -349,3 +351,10 @@ class DProcess:
                 return id
 
         return None
+
+    def search_reg(self, regex):
+        """
+            Given a regex return matches
+        :return:
+        """
+        return self._proc.search_regexp(regex)
